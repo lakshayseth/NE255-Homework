@@ -1,49 +1,65 @@
 clc;
 clear;
-alphas = [-0.5,0,0.5];
-alphas = 0;
-mu = [0.2,0.7];
-mu = 0.7;
-Qe = 1;
+alpha = 0.5;
+mu = 0.2;
 Sigma_T = 1;
-Sigma_S = 0.5;
-Sigma_S = 0.5;
-deltas = [0.08,0.1,0.125,0.2,0.4];
-deltas = 0.2;
+Sigma_S = 0.9;
+Qe = 1;
+delta = .2;
+
 x_i = 0;
 x_f = 2;
-IC1 = 2;
-for u = mu
-    for alpha = alphas
-        for delta = deltas
-            n = (x_f-x_i)/delta;
-            x = linspace(x_i,x_f,n);
-            for i = 1:n
-                Qin(i) = (2*i + 1) * Sigma_S * IC1 + Qe;
-                Flux_IN(i) = (1+delta*Sigma_T/(2*u))^(-1)*(IC1+delta*Qin(i)/(2*u));
-                Flux_P(i) = (2/(1+alpha))*Flux_IN(i)-((1-alpha)/(1+alpha))*IC1;
-                IC1 = Flux_P(i);
-            end
-            IC2 = IC1;
-            for j = n:-1:1
-                Qout(j) = (2*j + 1) * Sigma_S*IC1 + Qe;
-                Flux_OUT(j) = (1+delta*Sigma_T/(2*abs(u)))^(-1)*(IC2+delta*Qout(j)/(2*u));
-                Flux_M(j) = 2/(1+alpha)*Flux_OUT(j)-(1-alpha)/(1+alpha)*IC2;
-                IC2 = Flux_M(j);
-            end
-            SourceHolder = 0.5*(Qin+Qout);
-            ScalarFlux = 0.5*(Flux_IN + Flux_OUT);
-            fig = figure
-            plot(ScalarFlux)
-            str = sprintf('Graph at Mesh Spacing %f, \\alpha %f, \\mu %f', delta, alpha, u);
-            grid on
-            title(str);
-            N = 3;
-            MS = fix(rem(delta,1)*10^N);
-            A = fix(rem(alpha,1)*10^N);
-            U = fix(rem(u,1)*10^N);
-            %fname = sprintf('MS %d A %d U %d.jpg', MS, A, U);
-            %saveas(fig,fname)
-        end
+n = (x_f-x_i)/delta;
+
+x_forward = linspace(x_i,x_f,n);
+
+Psi_half = zeros(1,n);
+Psi_half(1) = 2;
+
+Psi = zeros(1,n);
+S = zeros(1,n);
+S_prev = zeros(1,n);
+Psi_reverse = zeros(1,n);
+
+RelativeError = 1;
+
+while RelativeError > 1e-4
+    
+    for i = 1:length(Psi)
+        S(i) = Sigma_S * Psi(i) + Qe;
+        Psi(i) = ( S(i) + (2*abs(mu)*Psi_half(i))/((1+alpha)*delta) ) / ( Sigma_T + ( (2*abs(mu)) / ((1+alpha)*delta) ) );
+        Psi_half(i+1) = ( (2*Psi(i)) / (1+alpha) ) - ( ( (1-alpha)/(1+alpha) ) * Psi_half(i));
     end
+    
+    Psi_half_reverse = fliplr(Psi_half);    
+    S_reverse = fliplr(S);
+    
+    for i = 1:length(Psi_reverse)
+        S_reverse(i) = Sigma_S * Psi_reverse(i) + Qe;
+        Psi_reverse(i) = ( S_reverse(i) + (2*abs(mu)*Psi_half_reverse(i))/((1-alpha)*delta) ) / ( Sigma_T + ( (2*abs(mu)) / ((1-alpha)*delta) ) );
+        Psi_half_reverse(i+1) = ( (2*Psi_reverse(i)) / (1-alpha) ) - ( ( (1+alpha)/(1-alpha) ) * Psi_half_reverse(i));
+    end
+    
+    
+    Diff = abs(S_prev - S);
+    AE = 0;
+    for i = 1:length(Diff)
+        AE = AE + (Diff(i))^2;
+    end
+    AbsoluteError = sqrt(AE);
+    
+    Denominator = 0;
+    for i = 1:length(S)
+        Denominator = Denominator + (S(i))^2;
+    end
+    Den = sqrt(Denominator);
+    
+    RelativeError = AbsoluteError/Denominator;
+    S_prev = S;
 end
+Psi = Psi + Psi_reverse;
+figure
+plot(x_forward, Psi)
+str = sprintf('Graph at \\Delta %f and \\alpha %f', delta, alpha);
+grid on
+title(str);
